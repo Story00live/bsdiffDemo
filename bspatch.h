@@ -39,4 +39,3 @@ struct bspatch_stream
 int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream);
 
 #endif
-

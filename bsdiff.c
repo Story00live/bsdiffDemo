@@ -1,34 +1,33 @@
-/*-
- * Copyright 2003-2005 Colin Percival
- * Copyright 2012 Matthew Endsley
- * All rights reserved
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted providing that the following conditions 
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/**
+  *********************************************************************************************************
+  * @file    main.c
+  * @author  Movebroad -- KK
+  * @version V1.0
+  * @date    2018-12-24
+  * @brief   1TAB = 5Speace
+  *********************************************************************************************************
+  * @attention
+  *
+  *
+  *
+  *********************************************************************************************************
+  */
 
 #include "bsdiff.h"
 
 #include <limits.h>
 #include <string.h>
+
+#include <sys/types.h>
+
+#include <bzlib.h>
+#include <err.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+//#define	DEBUG
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
 
@@ -349,17 +348,6 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 	return result;
 }
 
-#if defined(BSDIFF_EXECUTABLE)
-
-#include <sys/types.h>
-
-#include <bzlib.h>
-#include <err.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-
 static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 {
 	int bz2err;
@@ -373,7 +361,13 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 	return 0;
 }
 
-int main(int argc,char *argv[])
+/**********************************************************************************************************
+ @Function			int main(int argc, char const *argv[])
+ @Description			Main
+ @Input				void
+ @Return				int
+**********************************************************************************************************/
+int main(int argc, char const *argv[])
 {
 	int fd;
 	int bz2err;
@@ -389,26 +383,25 @@ int main(int argc,char *argv[])
 	stream.free = free;
 	stream.write = bz2_write;
 
-	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
+	if (argc != 4) errx(1, "usage: %s oldfile newfile patchfile\n", argv[0]);
 
 	/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
 		that we never try to malloc(0) and get a NULL pointer */
-	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
-		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
-		((old=malloc(oldsize+1))==NULL) ||
-		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,old,oldsize)!=oldsize) ||
-		(close(fd)==-1)) err(1,"%s",argv[1]);
-
-
+	if ( ((fd = open(argv[1], O_RDONLY, 0)) < 0) ||
+	     ((oldsize = lseek(fd, 0, SEEK_END)) == -1) ||
+	     ((old = malloc(oldsize + 1)) == NULL) ||
+	     (lseek(fd, 0, SEEK_SET) != 0) ||
+	     (read(fd, old, oldsize) != oldsize) ||
+		(close(fd) == -1) ) err(1, "%s", argv[1]);
+	
 	/* Allocate newsize+1 bytes instead of newsize bytes to ensure
 		that we never try to malloc(0) and get a NULL pointer */
-	if(((fd=open(argv[2],O_RDONLY,0))<0) ||
-		((newsize=lseek(fd,0,SEEK_END))==-1) ||
-		((new=malloc(newsize+1))==NULL) ||
-		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,new,newsize)!=newsize) ||
-		(close(fd)==-1)) err(1,"%s",argv[2]);
+	if ( ((fd = open(argv[2], O_RDONLY, 0)) < 0) ||
+	     ((newsize = lseek(fd, 0, SEEK_END)) == -1) ||
+	     ((new = malloc(newsize + 1)) == NULL) ||
+	     (lseek(fd, 0, SEEK_SET) != 0) ||
+	     (read(fd, new, newsize) != newsize) ||
+		(close(fd) == -1) ) err(1, "%s", argv[2]);
 
 	/* Create the patch file */
 	if ((pf = fopen(argv[3], "w")) == NULL)
@@ -416,10 +409,15 @@ int main(int argc,char *argv[])
 
 	/* Write header (signature+newsize)*/
 	offtout(newsize, buf);
-	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 ||
-		fwrite(buf, sizeof(buf), 1, pf) != 1)
+	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 || fwrite(buf, sizeof(buf), 1, pf) != 1)
 		err(1, "Failed to write header");
-
+#if defined(DEBUG)
+	printf("newsize : %d\n", newsize);
+	for (int i = 0; i < 8; i++) {
+		printf("%02X ", buf[i]);
+	}
+	printf("\n");
+#endif
 
 	if (NULL == (bz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)))
 		errx(1, "BZ2_bzWriteOpen, bz2err=%d", bz2err);
@@ -442,4 +440,4 @@ int main(int argc,char *argv[])
 	return 0;
 }
 
-#endif
+/********************************************** END OF FLEE **********************************************/

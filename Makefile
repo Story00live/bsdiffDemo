@@ -1,14 +1,31 @@
 cc = gcc
-prom = application
-deps = bsdiff.h bspatch.h				#$(shell find ./ -name "*.h")
-src = bsdiff.c bspatch.c main.c			#$(shell find ./ -name "*.c")
+prom = bsdiffDemo
+deps = $(shell find ./ -name "*.h")
+src = $(shell find ./ -name "*.c")
 obj = $(src:%.c=%.o)
 
 $(prom): $(obj)
-	$(cc) -o $(prom) $(obj)
+	$(cc) -lbz2 -std=c99 -o $(prom) $(obj)
 
 %.o: %.c $(deps)
-	$(cc) -c $< -o $@
+	$(cc) -lbz2 -std=c99 -c $< -o $@
 
 clean:
-	rm -rf $(obj) $(prom)
+	rm -rf $(obj)
+
+
+# CFLAGS              +=   -O3 -lbz2
+
+# PREFIX              ?=   /usr/local
+# INSTALL_PROGRAM     ?=   ${INSTALL} -c -s -m 555
+# INSTALL_MAN         ?=   ${INSTALL} -c -m 444
+
+# all:      bsdiff bspatch
+# bsdiff:   bsdiff.c
+# bspatch:  bspatch.c
+
+# install:
+# 		${INSTALL_PROGRAM} bsdiff bspatch ${PREFIX}/bin
+# 		.ifndef WITHOUT_MAN
+# 		${INSTALL_MAN} bsdiff.1 bspatch.1 ${PREFIX}/man/man1
+# 		.endif
