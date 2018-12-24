@@ -423,13 +423,6 @@ int main(int argc, char const *argv[])
 	offtout(newsize, buf);
 	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 || fwrite(buf, sizeof(buf), 1, pf) != 1)
 		err(1, "Failed to write header");
-#if defined(DEBUG)
-	printf("newsize : %d\n", newsize);
-	for (int i = 0; i < 8; i++) {
-		printf("%02X ", buf[i]);
-	}
-	printf("\n");
-#endif
 
 	if (NULL == (bz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)))
 		errx(1, "BZ2_bzWriteOpen, bz2err=%d", bz2err);
