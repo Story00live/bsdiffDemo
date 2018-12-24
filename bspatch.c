@@ -46,9 +46,21 @@ static int64_t offtin(uint8_t *buf)
 	return y;
 }
 
+static int16_t offtin_2byte(uint8_t *buf)
+{
+	int16_t y;
+
+	y=buf[1]&0x7F;
+	y=y*256;y+=buf[0];
+
+	if(buf[1]&0x80) y=-y;
+
+	return y;
+}
+
 int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream)
 {
-	uint8_t buf[8];
+	uint8_t buf[2];
 	int64_t oldpos,newpos;
 	int64_t ctrl[3];
 	int64_t i;
@@ -57,9 +69,9 @@ int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, 
 	while(newpos<newsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			if (stream->read(stream, buf, 8))
+			if (stream->read(stream, buf, 2))
 				return -1;
-			ctrl[i]=offtin(buf);
+			ctrl[i]=offtin_2byte(buf);
 		};
 
 		/* Sanity-check */

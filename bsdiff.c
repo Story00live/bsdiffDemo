@@ -184,6 +184,18 @@ static void offtout(int64_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
+static void offtout_2byte(int16_t x, uint8_t *buf)
+{
+	int16_t y;
+
+	if(x<0) y=-x; else y=x;
+
+	buf[0]=y%256;y-=buf[0];
+	y=y/256;buf[1]=y%256;
+
+	if(x<0) buf[1]|=0x80;
+}
+
 static int64_t writedata(struct bsdiff_stream* stream, const void* buffer, int64_t length)
 {
 	int64_t result = 0;
@@ -226,7 +238,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	int64_t overlap,Ss,lens;
 	int64_t i;
 	uint8_t *buffer;
-	uint8_t buf[8 * 3];
+	uint8_t buf[2 * 3];
 
 	if((V=req.stream->malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) return -1;
 	I = req.I;
@@ -291,9 +303,9 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				lenb-=lens;
 			};
 
-			offtout(lenf,buf);
-			offtout((scan-lenb)-(lastscan+lenf),buf+8);
-			offtout((pos-lenb)-(lastpos+lenf),buf+16);
+			offtout_2byte(lenf,buf);
+			offtout_2byte((scan-lenb)-(lastscan+lenf),buf+2);
+			offtout_2byte((pos-lenb)-(lastpos+lenf),buf+4);
 
 			/* Write control data */
 			if (writedata(req.stream, buf, sizeof(buf)))
