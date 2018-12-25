@@ -109,6 +109,8 @@ int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, 
 
 static int bz2_read(const struct bspatch_stream* stream, void* buffer, int length)
 {
+#if 0
+
 	int n;
 	int bz2err;
 	BZFILE* bz2;
@@ -119,6 +121,20 @@ static int bz2_read(const struct bspatch_stream* stream, void* buffer, int lengt
 		return -1;
 
 	return 0;
+
+#else
+
+	int n;
+	FILE* f;
+
+	f = (FILE*)stream->opaque;
+	n = fread(buffer, 1, length, f);
+	if (n != length)
+		return -1;
+
+	return 0;
+
+#endif
 }
 
 /**********************************************************************************************************
@@ -133,13 +149,87 @@ int main(int argc, char const *argv[])
 	int fd;
 	int bz2err;
 	uint8_t header[24];
-	uint8_t *old, *new;
-	int64_t oldsize, newsize;
+	uint8_t *old, *new, *patchold, *patchnew;
+	int64_t oldsize, newsize, patcholdsize, patchnewsize;
 	BZFILE* bz2;
 	struct bspatch_stream stream;
 	struct stat sb;
 
+	uint8_t decompressState = 0;
+	uint16_t decompressZeroNum = 0;
+
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
+
+#if 1
+
+	/* 私有解压算法 */
+	/* step1 : 以读取方式打开patch文件,读取patch文件内容,并存在申请的patch内存中 */
+	if ( ((fd = open(argv[3], O_RDONLY, 0)) < 0) ||
+		((patcholdsize = lseek(fd, 0, SEEK_END)) == -1) ||
+		((patchold = malloc(patcholdsize + 1)) == NULL) ||
+		(lseek(fd, 0, SEEK_SET) != 0) ||
+		(read(fd, patchold, patcholdsize) != patcholdsize) ||
+		(close(fd) == -1) ) err(1, "%s", argv[3]);
+
+#if 0
+	printf("\r\npatcholdsize : %d\r\n", patcholdsize);
+	for (int i = 0; i < patcholdsize; i++) {
+		printf("%02X ", patchold[i]);
+	}
+	printf("\r\n\r\n");
+#endif
+
+	/* step2 : 创建patchnew内存,用来存放压缩结果 */
+	if ((patchnew = malloc(512 * 1024)) == NULL) err(1, "patchnew");
+
+	/* step3 : 解缩算法处理 */
+	patchnewsize = 0;
+	for (int64_t offset = 0; offset < patcholdsize; offset++) {
+
+		if (decompressState == 0) {
+			/* 不为0保留值 */
+			if (patchold[offset] != 0x00) {
+				patchnew[patchnewsize] = patchold[offset];
+				patchnewsize++;
+				continue;
+			}
+		}
+		else {
+			decompressZeroNum = patchold[offset];
+			for (int64_t zeroNum = 0; zeroNum < decompressZeroNum; zeroNum++) {
+				patchnew[patchnewsize++] = 0x00;
+			}
+			decompressState = 0;
+			continue;
+		}
+
+		/* 解压0 */
+		decompressState = 1;
+
+	}
+
+#if 0
+	printf("\r\npatchnewsize : %d\r\n", patchnewsize);
+	for (int i = 0; i < patchnewsize; i++) {
+		printf("%02X ", patchnew[i]);
+	}
+	printf("\r\n\r\n");
+#endif
+
+	/* step4 : 压缩结果写入patch文件 */
+	if ((f = fopen(argv[3], "w")) == NULL)
+		err(1, "%s", argv[3]);
+	
+	if (fwrite(patchnew, patchnewsize, 1, f) != 1)
+		err(1, "Failed to write patchnew");
+
+	if (fclose(f))
+		err(1, "fclose");
+
+	free(patchold);
+	free(patchnew);
+
+#endif
 
 	/* Open patch file */
 	if ((f = fopen(argv[3], "r")) == NULL)
@@ -171,6 +261,9 @@ int main(int argc, char const *argv[])
 		(close(fd)==-1)) err(1,"%s",argv[1]);
 	if((new=malloc(newsize+1))==NULL) err(1,NULL);
 
+
+#if 0
+
 	if (NULL == (bz2 = BZ2_bzReadOpen(&bz2err, f, 0, 0, NULL, 0)))
 		errx(1, "BZ2_bzReadOpen, bz2err=%d", bz2err);
 
@@ -181,6 +274,17 @@ int main(int argc, char const *argv[])
 
 	/* Clean up the bzip2 reads */
 	BZ2_bzReadClose(&bz2err, bz2);
+
+#else
+
+	stream.read = bz2_read;
+	stream.opaque = f;
+	if (bspatch(old, oldsize, new, newsize, &stream))
+		errx(1, "bspatch");
+
+#endif
+
+
 	fclose(f);
 
 	/* Write the new file */

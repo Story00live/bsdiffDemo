@@ -362,6 +362,8 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 
 static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 {
+#if 0
+
 	int bz2err;
 	BZFILE* bz2;
 
@@ -371,6 +373,19 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 		return -1;
 
 	return 0;
+
+#else
+
+	int fileerr;
+	FILE* pf;
+
+	pf = (FILE*)stream->opaque;
+	if ((fileerr = fwrite(buffer, size, 1, pf)) != 1)
+		return -1;
+
+	return 0;
+
+#endif
 }
 
 /**********************************************************************************************************
@@ -383,12 +398,15 @@ int main(int argc, char const *argv[])
 {
 	int fd;
 	int bz2err;
-	uint8_t *old,*new;
-	off_t oldsize,newsize;
+	uint8_t *old,*new,*patchold,*patchnew;
+	off_t oldsize,newsize,patcholdsize,patchnewsize;
 	uint8_t buf[8];
 	FILE * pf;
 	struct bsdiff_stream stream;
 	BZFILE* bz2;
+
+	uint8_t compressState = 0;
+	uint16_t compressZeroNum = 0;
 
 	memset(&bz2, 0, sizeof(bz2));
 	stream.malloc = malloc;
@@ -424,6 +442,9 @@ int main(int argc, char const *argv[])
 	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 || fwrite(buf, sizeof(buf), 1, pf) != 1)
 		err(1, "Failed to write header");
 
+
+#if 0
+
 	if (NULL == (bz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)))
 		errx(1, "BZ2_bzWriteOpen, bz2err=%d", bz2err);
 
@@ -435,12 +456,109 @@ int main(int argc, char const *argv[])
 	if (bz2err != BZ_OK)
 		err(1, "BZ2_bzWriteClose, bz2err=%d", bz2err);
 
+#else
+
+	stream.opaque = pf;
+	if (bsdiff(old, oldsize, new, newsize, &stream))
+		err(1, "bsdiff");
+
+#endif
+
+
 	if (fclose(pf))
 		err(1, "fclose");
 
 	/* Free the memory we used */
 	free(old);
 	free(new);
+
+
+#if 1
+
+	/* 私有压缩算法 */
+	/* step1 : 以读取方式打开patch文件,读取patch文件内容,并存在申请的patch内存中 */
+	if ( ((fd = open(argv[3], O_RDONLY, 0)) < 0) ||
+		((patcholdsize = lseek(fd, 0, SEEK_END)) == -1) ||
+		((patchold = malloc(patcholdsize + 1)) == NULL) ||
+		(lseek(fd, 0, SEEK_SET) != 0) ||
+		(read(fd, patchold, patcholdsize) != patcholdsize) ||
+		(close(fd) == -1) ) err(1, "%s", argv[3]);
+
+#if 0
+	printf("\r\npatcholdsize : %d\r\n", patcholdsize);
+	for (int i = 0; i < patcholdsize; i++) {
+		printf("%02X ", patchold[i]);
+	}
+	printf("\r\n\r\n");
+#endif
+
+	/* step2 : 创建patchnew内存,用来存放压缩结果 */
+	if ((patchnew = malloc(patcholdsize + 1024 + 1)) == NULL) err(1, "patchnew");
+
+	/* step3 : 压缩算法处理 */
+	patchnewsize = 0;
+	for (int64_t offset = 0; offset < patcholdsize; offset++) {
+		
+		if (compressState == 0) {
+			/* 不为0保留值 */
+			if (patchold[offset] != 0x00) {
+				patchnew[patchnewsize] = patchold[offset];
+				patchnewsize++;
+				continue;
+			}
+		}
+		
+		/* 压缩0 */
+		compressState = 1;
+		if (patchold[offset] != 0x00) {
+			compressState = 0;
+			patchnew[patchnewsize++] = 0x00;
+			patchnew[patchnewsize++] = compressZeroNum;
+			compressZeroNum = 0;
+			patchnew[patchnewsize++] = patchold[offset];
+			continue;
+		}
+
+		compressZeroNum += 1;
+		if (compressZeroNum == 0xFF) {
+			compressState = 0;
+			patchnew[patchnewsize++] = 0x00;
+			patchnew[patchnewsize++] = compressZeroNum;
+			compressZeroNum = 0;
+			continue;
+		}
+
+		if ((compressState != 0) && (offset == (patcholdsize - 1)) && (patchold[offset] == 0x00)) {
+			compressState = 0;
+			patchnew[patchnewsize++] = 0x00;
+			patchnew[patchnewsize++] = compressZeroNum;
+			compressZeroNum = 0;
+		}
+		
+	}
+
+#if 0
+	printf("\r\npatchnewsize : %d\r\n", patchnewsize);
+	for (int i = 0; i < patchnewsize; i++) {
+		printf("%02X ", patchnew[i]);
+	}
+	printf("\r\n\r\n");
+#endif
+
+	/* step4 : 压缩结果写入patch文件 */
+	if ((pf = fopen(argv[3], "w")) == NULL)
+		err(1, "%s", argv[3]);
+
+	if (fwrite(patchnew, patchnewsize, 1, pf) != 1)
+		err(1, "Failed to write patchnew");
+
+	if (fclose(pf))
+		err(1, "fclose");
+
+	free(patchold);
+	free(patchnew);
+
+#endif
 
 	return 0;
 }
