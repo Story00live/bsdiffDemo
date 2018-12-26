@@ -226,9 +226,6 @@ int main(int argc, char const *argv[])
 	if (fclose(f))
 		err(1, "fclose");
 
-	free(patchold);
-	free(patchnew);
-
 #endif
 
 	/* Open patch file */
@@ -294,6 +291,23 @@ int main(int argc, char const *argv[])
 
 	free(new);
 	free(old);
+
+#if 1
+
+	/* step5 : 还原patch文件 */
+	if ((f = fopen(argv[3], "w")) == NULL)
+		err(1, "%s", argv[3]);
+	
+	if (fwrite(patchold, patcholdsize, 1, f) != 1)
+		err(1, "Failed to write patchnew");
+
+	if (fclose(f))
+		err(1, "fclose");
+
+	free(patchold);
+	free(patchnew);
+
+#endif
 
 	return 0;
 }
